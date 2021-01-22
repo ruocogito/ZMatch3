@@ -47,7 +47,7 @@ namespace ZMatch3
 
         private System.Random rand;
         private (short,short) ichosenelm;
-        //active arrays: store match bonus here to active it after small ticks pass
+        //active arrays: store match bonus here to active after litle bit ticks pass
         (ushort i, ushort j, int tickcounter)[] activebombs;
         (ushort i, ushort j, int tickcounter, ushort type)[] activereapers;
         ushort score;
