@@ -22,7 +22,7 @@ namespace ZMatch3
         {
             var handle = GetConsoleWindow();
 
-            // Hide
+            // Hide console window
             ShowWindow(handle, SW_HIDE);
 
             var nativeWindowSettings = new NativeWindowSettings()

@@ -4,7 +4,9 @@ using System.Text;
 using System.Collections.Generic;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
-
+/* Tutorial Class
+ * https://opentk.net/learn
+ */
 namespace ZMatch3.Common
 {
     // A simple class meant to help create shaders.

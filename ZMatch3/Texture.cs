@@ -2,9 +2,10 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using PixelFormat = OpenTK.Graphics.OpenGL4.PixelFormat;
-
 using System;
-
+/* Tutorial Class
+ * https://opentk.net/learn
+ */
 namespace ZMatch3.Common
 {
     // A helper class, much like Shader, meant to simplify loading textures.

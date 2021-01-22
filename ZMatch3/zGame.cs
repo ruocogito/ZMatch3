@@ -5,13 +5,16 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using OpenTK.Windowing.Desktop;
 
 using OpenTK.Mathematics;
+/*
+ * Game logic class
+ */
 
 namespace ZMatch3
 {
     class zGame : GameWindow
     {
 
-        // vertex array wuith texture coordinates.
+        // vertex array with texture coordinates.
         private readonly float[] _vertices =
         {
             // Position         Texture coordinates
