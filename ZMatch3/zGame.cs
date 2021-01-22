@@ -6,25 +6,12 @@ using OpenTK.Windowing.Desktop;
 
 using OpenTK.Mathematics;
 
-//using System.Numerics;
 namespace ZMatch3
 {
     class zGame : GameWindow
     {
 
-        // Because we're adding a texture, we modify the vertex array to include texture coordinates.
-        // Texture coordinates range from 0.0 to 1.0, with (0.0, 0.0) representing the bottom left, and (1.0, 1.0) representing the top right
-        // The new layout is three floats to create a vertex, then two floats to create the coordinates
-        /* private readonly float[] _vertices =
-         {
-             // Position         Texture coordinates
-              0.09f -0.85f,  0.1f +0.85f, 0.0f, 1.0f, 1.0f, // top right
-              0.09f -0.85f, -0.1f +0.85f, 0.0f, 1.0f, 0.0f, // bottom right
-             -0.09f -0.85f, -0.1f +0.85f, 0.0f, 0.0f, 0.0f, // bottom left
-             -0.09f -0.85f,  0.1f +0.85f, 0.0f, 0.0f, 1.0f  // top left
-         };*/
-        //hx = 0.2
-        //hy = 0.2
+        // vertex array wuith texture coordinates.
         private readonly float[] _vertices =
         {
             // Position         Texture coordinates
@@ -33,43 +20,44 @@ namespace ZMatch3
             -0.1f -0.661f, -0.1f +0.6287f, 0.0f, 0.0f, 0.0f, // bottom left
             -0.1f -0.661f,  0.1f +0.6287f, 0.0f, 0.0f, 1.0f  // top left
         };
-        //x: 0.01:3px?
-        //y: 0.01:3px?
+        
         private readonly uint[] _indices =
         {
             0, 1, 3,
             1, 2, 3
         };
 
-        // These are the handles to OpenGL objects. A handle is an integer representing where the object lives on the
-        // graphics card. Consider them sort of like a pointer; we can't do anything with them directly, but we can
-        // send them to OpenGL functions that need them.
-
-        // What these objects are will be explained in OnLoad.
+        // These are the handles to OpenGL objects. 
         private int _vertexBufferObject;
-
         private int _vertexArrayObject;
-
-        // This class is a wrapper around a shader, which helps us manage it.
-        // The shader class's code is in the Common project.
-        // What shaders are and what they're used for will be explained later in this tutorial.
         private Shader _shader;
-        
-        // Add a handle for the EBO
         private int _elementBufferObject;
+        //textures
         private Texture[] _texture;
-        Texture txtrbomb, v_reaper, h_reaper;
         System.Collections.Generic.Dictionary<string, Texture> txtr_fortext;
+        //main Elements array
         private zElm[,] Elms;
+        //Constants
         private float elmdx, elmdy;
         float delta;
+        int const_waittospawn;
+
         private System.Random rand;
         private (short,short) ichosenelm;
+        //active arrays: store match bonus here to active it after small ticks pass
         (ushort i, ushort j, int tickcounter)[] activebombs;
         (ushort i, ushort j, int tickcounter, ushort type)[] activereapers;
         ushort score;
         System.DateTime dtstarted;
+        /*
+         gameMode:
+         0 - play
+         1 - game
+         2 - game over
+         */
         ushort gameMode;
+        bool animation;
+        
         private ushort ChoiceRandomFromRangeExceptOne(ushort one = ushort.MaxValue, ushort yaone=ushort.MaxValue)
         {
             System.Collections.Generic.List<ushort> lrange = new System.Collections.Generic.List<ushort>();
@@ -82,17 +70,22 @@ namespace ZMatch3
         {
             elmdx = 0.18f;
             elmdy = 0.18f;
+            //velocity: NDC per tick
             delta = 0.003f;
-            //// docs.microsoft.com: Instantiate random number generator using system-supplied value as seed.
-            rand = new System.Random();
+            //Delay before new top elements will draw
+            const_waittospawn = 40;
+             rand = new System.Random();
             ichosenelm = (-1,-1);
+            //Delay before global match func will call, user must see what happens
             waittomatch = 0;
             test_keydelay = 0;
             activebombs = new (ushort i, ushort j, int tickcounter)[3];
             activereapers = new (ushort i, ushort j, int tickcounter, ushort type)[3];
             score = 0;
             gameMode = 0;
-            
+            animation = false;
+
+
         } 
         void DestroyElm(ushort i, ushort j)
         {
@@ -126,7 +119,18 @@ namespace ZMatch3
                 }
 
         }
-        // Now, we start initializing OpenGL.
+        void LoadTexture(string name)
+        {
+            txtr_fortext.Add(name, Texture.LoadFromFile("Resources/" + name+".png"));
+        }
+        void UseTexture(string name, int unit=0)
+        {
+            if(unit==1)
+                txtr_fortext[name].Use(TextureUnit.Texture1);
+            else
+                txtr_fortext[name].Use(TextureUnit.Texture0);
+        }
+        // initializing OpenGL.
         protected override void OnLoad()
         {
             GL.ClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -142,21 +146,16 @@ namespace ZMatch3
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, _elementBufferObject);
             GL.BufferData(BufferTarget.ElementArrayBuffer, _indices.Length * sizeof(uint), _indices, BufferUsageHint.StaticDraw);
 
-            // The shaders have been modified to include the texture coordinates, check them out after finishing the OnLoad function.
+            // The shaders with texture coordinates
             _shader = new Shader("Shaders/shader.vert", "Shaders/shader_bomb.frag");
             _shader.Use();
-
-           
-            // Because there's now 5 floats between the start of the first vertex and the start of the second,
-            // we modify this from 3 * sizeof(float) to 5 * sizeof(float).
+                       
             // This will now pass the new vertex array to the buffer.
             var vertexLocation = _shader.GetAttribLocation("aPosition");
             GL.EnableVertexAttribArray(vertexLocation);
             GL.VertexAttribPointer(vertexLocation, 3, VertexAttribPointerType.Float, false, 5 * sizeof(float), 0);
             
-            // Next, we also setup texture coordinates. It works in much the same way.
-            // We add an offset of 3, since the first vertex coordinate comes after the first vertex
-            // and change the amount of data to 2 because there's only 2 floats for vertex coordinates
+            // setup texture coordinates. 
             var texCoordLocation = _shader.GetAttribLocation("aTexCoord");
             GL.EnableVertexAttribArray(texCoordLocation);
             GL.VertexAttribPointer(texCoordLocation, 2, VertexAttribPointerType.Float, false, 5 * sizeof(float), 3 * sizeof(float));
@@ -173,25 +172,16 @@ namespace ZMatch3
 
             Elms = new zElm[8, 8];
            
-
-            /*foreach(var txtr in _texture)
-            {
-                txtr.Use(TextureUnit.Texture0);
-            }*/
-
-            txtrbomb = Texture.LoadFromFile("Resources/bomb.png");
-          
-            v_reaper = Texture.LoadFromFile("Resources/v_reaper.png");
-            h_reaper = Texture.LoadFromFile("Resources/h_reaper.png");
             txtr_fortext = new System.Collections.Generic.Dictionary<string, Texture>();
             foreach(var c in "score0123456789")
-                txtr_fortext.Add(""+c, Texture.LoadFromFile("Resources/"+ c + ".png"));
+                txtr_fortext.Add(c.ToString(), Texture.LoadFromFile("Resources/"+ c + ".png"));
             txtr_fortext.Add(":", Texture.LoadFromFile("Resources/ddot.png"));
-            txtr_fortext.Add(" ", Texture.LoadFromFile("Resources/nothing.png")); 
-            txtr_fortext.Add("play", Texture.LoadFromFile("Resources/play.png"));
-            txtr_fortext.Add("gameover", Texture.LoadFromFile("Resources/gameover.png"));
-            txtr_fortext.Add("time", Texture.LoadFromFile("Resources/time.png"));
-            txtr_fortext.Add("field", Texture.LoadFromFile("Resources/field.png"));
+            txtr_fortext.Add(" ", Texture.LoadFromFile("Resources/nothing.png"));
+
+            string[] textures = { "play", "gameover", "time", "field", "bomb", "v_reaper", "h_reaper" };
+            foreach (string name in textures)
+                LoadTexture(name);
+
             _shader.SetInt("texture0", 0);
             _shader.SetInt("texture1", 1);
             base.OnLoad();
@@ -201,8 +191,8 @@ namespace ZMatch3
             var transform = Matrix4.Identity;
             transform = transform * Matrix4.CreateTranslation(Tx, Ty, 0.0f);
             transform = transform * Matrix4.CreateScale(Sx, Sy, 1f);
-            txtr_fortext[texturename].Use(TextureUnit.Texture0);
-            txtr_fortext[" "].Use(TextureUnit.Texture1);
+            UseTexture(texturename, 0);
+            UseTexture(" ", 1);
             _shader.Use();
             _shader.SetMatrix4("transform", transform);
             GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, 0);
@@ -222,8 +212,8 @@ namespace ZMatch3
         {
             var transform = Matrix4.Identity;
             transform = transform* Matrix4.CreateTranslation(MTxy.Item1, MTxy.Item2, 0.0f);
-            txtr_fortext[drwchar].Use(TextureUnit.Texture0);
-            txtr_fortext[" "].Use(TextureUnit.Texture1);
+            UseTexture(drwchar, 0);
+            UseTexture(" ", 1);
             _shader.Use();
             _shader.SetMatrix4("transform", transform);
             GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, 0);
@@ -249,22 +239,18 @@ namespace ZMatch3
             }
             transform = transform*Matrix4.CreateTranslation(MTxy.Item1, MTxy.Item2, 0.0f);
             _texture[Elms[ielm, jelm].elmtype].Use(TextureUnit.Texture0);
-            //_texture[type].Use(TextureUnit.Texture1);
-            if(Elms[ielm, jelm].IsBomb)
-                txtrbomb.Use(TextureUnit.Texture1);
+           
+            if (Elms[ielm, jelm].IsBomb)
+                UseTexture("bomb",1);
             else if(Elms[ielm, jelm].ReaperType==0 || Elms[ielm, jelm].elmtype==5)
-                txtr_fortext[" "].Use(TextureUnit.Texture1);
+                UseTexture(" ", 1);
             else if (Elms[ielm, jelm].ReaperType == 1 )
-                h_reaper.Use(TextureUnit.Texture1);
+                UseTexture("h_reaper", 1);
             else
-                v_reaper.Use(TextureUnit.Texture1);
+                UseTexture("v_reaper", 1);
 
             _shader.Use();
             _shader.SetMatrix4("transform", rot*transform);
-
-
-            //_shader.SetVector3("objectColor", new Vector3(1.0f, 1.0f, 1.0f));
-           // _shader.SetVector3("lightColor", new Vector3(1.0f, 1.0f, 1.0f));
 
             GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, 0);
         }
@@ -361,10 +347,7 @@ namespace ZMatch3
                 else //no any alive elm up
                 {
                     Elms[i,l] = new zElm(ChoiceRandomFromRangeExceptOne());
-                    Elms[i, l].waittospawn = 20;
-                  //  int tickcount = (int)(l*elmdy / delta);
-                   // if(l>0)
-                    //    Elms[i, l].StartAnimation((i, 0), tickcount, -delta, false);
+                    Elms[i, l].waittospawn = const_waittospawn;
                 }
             }
             
@@ -401,7 +384,6 @@ namespace ZMatch3
             if (matchi || matchj)
             {
                 Elms[i, j].isfakeexchanged = false;
-                //if (Elms[i, j].isanimated) Elms[Elms[i, j].getorgij.Item1, Elms[i, j].getorgij.Item2].isfakeexchanged = false;
                 Elms[i, j].isanimated = false;
             }
             if (matchi && matchj || right_match - left_match >= 4 || up_match - down_match >= 4)
@@ -412,43 +394,7 @@ namespace ZMatch3
                 Elms[i, j].SpawnHReaperThere = true;
             else if (!(matchi && matchj) && (up_match - down_match == 3))
                 Elms[i, j].SpawnVReaperThere = true;
-            //past spawned reaper in the match
-          /*  if (!(matchi && matchj) && matchi)
-            {
-                for (ushort k = left_match; k <= right_match; k++)
-                    if (Elms[k, j].ReaperType > 0)
-                    {
-                        SpawnActiveReaper(k, j);
-                        return true;
-                    }
-            }
-            else if (!(matchi && matchj) && matchj)
-            {
-                for (ushort k = down_match; k <= up_match; k++)
-                    if (Elms[i, k].ReaperType > 0)
-                    {
-                        SpawnActiveReaper(k, j);
-                        return true;
-                    }
-            }
-            if(matchi && matchj)
-            {
-                bool jreaper = false;
-                for (ushort k = down_match; k <= up_match; k++)
-                {
-                    if (Elms[i, k].ReaperType > 0)
-                        jreaper = true;
-                }
-                bool ireaper = false;
-                for (ushort k = left_match; k <= right_match; k++)
-                    if (Elms[k, j].ReaperType > 0)
-                        ireaper = true;
-
-            }*/
-
-
-
-
+         
             if (matchi && !(matchi && matchj))
                 DestroyLineI(left_match, j, right_match);
             if (matchj && !(matchi && matchj))
@@ -526,13 +472,7 @@ namespace ZMatch3
                             }
                         }
                         if (!match) //move back
-                        {
-                            //(ushort, ushort) Elm2 = Elms[i, j].CalcNeighbor(i, j);
-                            //Elms[i, j].isfakeexchanged = false;
                             StartExchangeAnimation(toshortuple(Elms[i, j].getorgij), toshortuple((i, j)), false);
-                        }
-                        //else
-
                     }
                     else if (Elms[i, j].isanimated && !Elms[i, j].IsAnmFinished())
                     {
@@ -562,12 +502,11 @@ namespace ZMatch3
                                 Elms[i, j].IsDestroed = true;
                                 Elms[nextir, j].StartAnimation((i, j), tickcount * (nextir - i), delta, true);
                             }
-                            else //if ((Elms[i, j].getorgij.Item1 > i && nextil < 0) || (Elms[i, j].getorgij.Item1 < i && nextir > 7))
+                            else
                             {
                                 Elms[i, j].IsDestroed = true;
                                 Elms[i, j].isanimated = false;
                                 Elms[i, j].ReaperType = 0;
-                                // MakeGravityJ(i, j);
                             }
 
                         }
@@ -589,7 +528,7 @@ namespace ZMatch3
                                 Elms[i, j].IsDestroed = true;
                                 Elms[i, nextju].StartAnimation((i, j), tickcount * (nextju - j), -delta, false);
                             }
-                            else //if ((Elms[i, j].getorgij.Item2 > j && nextjd < 0) || (Elms[i, j].getorgij.Item2 < j && nextju > 7))
+                            else
                             {
                                 Elms[i, j].IsDestroed = true;
                                 Elms[i, j].isanimated = false;
@@ -603,7 +542,7 @@ namespace ZMatch3
 
                     else if (!Elms[i, j].isanimated || Elms[i, j].IsAnmFinished())
                     {
-                        //draw by indixes
+                        //static elements, draw by indiсes
 
                         if (Elms[i, j].waittospawn > 0 && Elms[i, j].isanimated)
                             Elms[i, j].waittospawn = 0;
@@ -642,7 +581,6 @@ namespace ZMatch3
                         score++;
                         if (activereapers[k].i - 1 >= 0)
                         {
-                            //to do: this element destroed too!
                             Elms[activereapers[k].i - 1, activereapers[k].j] = new zElm(5, activereapers[k].type);
                             Elms[activereapers[k].i - 1, activereapers[k].j].StartAnimation((activereapers[k].i, activereapers[k].j), tickcount, -delta, true);
                         }
@@ -681,26 +619,6 @@ namespace ZMatch3
             else
                 waittomatch++;
 
-            /*var transform = Matrix4.Identity;
-            //transform = transform * Matrix4.CreateTranslation(-0.85f - danimation, 0.85f, 0.0f);
-            
-            _texture.Use(TextureUnit.Texture0);
-            _shader.Use();
-            _shader.SetMatrix4("transform", transform);*/
-
-            // System.IntPtr ar;
-            // GL.GetVertexAttribPointer(0, VertexAttribPointerParameter.ArrayPointer ,  ar);
-
-
-            // if (! gone) GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, 0);
-
-            /*   transform = Matrix4.Identity;
-               transform = transform * Matrix4.CreateTranslation(0.6f, 0.5f - danimation, 0.0f);
-
-               _texture2.Use(TextureUnit.Texture0);
-               _shader.Use();
-               _shader.SetMatrix4("transform", transform);
-               if (!gone) GL.DrawElements(PrimitiveType.Triangles, _indices.Length, DrawElementsType.UnsignedInt, 0);*/
             System.TimeSpan dt = System.DateTime.Now - dtstarted;
             int sec = 60 - (int)dt.TotalSeconds;
             DrawText("score:" + score + "         " + sec.ToString());
@@ -708,9 +626,9 @@ namespace ZMatch3
             DrawControl(0.658f, -0.627f, 7.28f, 7.28f, "field");
             if (sec == 0)
                 gameMode = 2;
+            this.animation = animationexist;
         }
-        // This function runs on every update frame.
-        // Now that initialization is done, let's create our render loop.
+        // Runs on every update frame.
         protected override void OnRenderFrame(FrameEventArgs e)
         {
             GL.Clear(ClearBufferMask.ColorBufferBit);
@@ -724,14 +642,10 @@ namespace ZMatch3
                 DrawControl(0.540f, -0.35f, 5.7f, 1f, "play");
             else
                 DrawControl(0.665f, -0.35f, 5.7f, 1f, "gameover");
-            //DrawControlObject((0.4f,0.25f), "s");
-            //DrawControlObject((0.48f, 0.25f), "c");
-
+           
             SwapBuffers();
 
-            //danimation += 0.001f;
-
-            base.OnRenderFrame(e);
+           base.OnRenderFrame(e);
         }
         void TestSetElmsI(int i1, int i2, int j, ushort type)
         {
@@ -752,7 +666,7 @@ namespace ZMatch3
         int test_keydelay;
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
-            // Check if the Escape button is currently being pressed.
+            // Escape button is currently being pressed.
             if (KeyboardState.IsKeyDown(Keys.Escape))
             {
                 // If it is, close the window.
@@ -785,7 +699,7 @@ namespace ZMatch3
                 ExchangeElms(7, 5, 7, 4);
 
                test_keydelay = 40;
-            }
+            } //Test
             if (KeyboardState.IsKeyDown(Keys.F2) && test_keydelay == 0)
             {
                 for (ushort k = 0; k <= 3; k++)
@@ -822,8 +736,8 @@ namespace ZMatch3
         }
         protected override void OnResize(ResizeEventArgs e)
         {
-            // When the window gets resized, we have to call GL.Viewport to resize OpenGL's viewport to match the new size.
-            // If we don't, the NDC will no longer be correct.
+            // resize OpenGL's viewport to match the new size.
+            // If no the NDC will be incorrect.
             GL.Viewport(0, 0, Size.X, Size.Y);
             base.OnResize(e);
         }
@@ -841,57 +755,22 @@ namespace ZMatch3
             GL.DeleteVertexArray(_vertexArrayObject);
 
             GL.DeleteProgram(_shader.Handle);
-            // Don't forget to dispose of the texture too!
+            // dispose of the texture
             foreach (var txtr in _texture)
                 GL.DeleteTexture(txtr.Handle);
+
+            foreach (var txtr in txtr_fortext)
+                GL.DeleteTexture(txtr.Value.Handle);
             
             base.OnUnload();
         }
 
-        //public static void DrawCircle(float x, float y, float radius, Color4 c)
-        //{
-            //GL.Enable(EnableCap.Blend);
-            //GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
-            //GL.Begin(PrimitiveType.TriangleFan);
-            
-            //GL.Color4(c);
-
-            //GL.Vertex2(x, y);
-          //  for (int i = 0; i < 360; i++)
-            //{
-              //  GL.Vertex2(x + Math.Cos(i) * radius, y + Math.Sin(i) * radius);
-            //}
-
-            //GL.End();
-            //GL.Disable(EnableCap.Blend);
-        //}
-
-        bool mouseDown, mouseclick, locked;
-        Vector2? newPos, initialPos;
-
-       /* protected override void OnMouseMove(MouseMoveEventArgs e)
-        {
-            if (MouseState.IsButtonDown(MouseButton.Left))
-            {
-                mouseDown = true;
-                newPos = new Vector2(MouseState.X, MouseState.Y);
-            }
-            base.OnMouseMove(e);
-        }*/
+       Vector2? initialPos;
 
         protected override void OnMouseDown(MouseButtonEventArgs e)
         {
             
-            if (e.Button == MouseButton.Left)
-            {
-                if (locked)
-                {
-                    mouseclick = !mouseclick;
-                }
-            }
-
-            //if(initialPos is null)
-            initialPos = new Vector2(MouseState.X, MouseState.Y);
+          initialPos = new Vector2(MouseState.X, MouseState.Y);
             
 
             base.OnMouseDown(e);
@@ -918,15 +797,13 @@ namespace ZMatch3
             Elms[elm1.Item1, elm1.Item2].StartAnimation(toushortuple(elm1), tickcount, -delta * sign, ry == 0, false);
             Elms[elm2.Item1, elm2.Item2].StartAnimation(toushortuple(elm2), tickcount, delta * sign, ry == 0, fake);
             //exchange
-            zElm t = Elms[elm1.Item1, elm1.Item2];
-            Elms[elm1.Item1, elm1.Item2] = Elms[elm2.Item1, elm2.Item2];
-            Elms[elm2.Item1, elm2.Item2] = t;
+            ExchangeElms(elm1.Item1, elm1.Item2,elm2.Item1, elm2.Item2);
         }
         protected override void OnMouseUp(MouseButtonEventArgs e)
         {
             if (initialPos is null) //may be down out of window
-            { //to do: check down and up at one field
-               base.OnMouseUp(e);
+            { 
+                base.OnMouseUp(e);
                 return;
             }
             //process mouse events
@@ -959,20 +836,17 @@ namespace ZMatch3
                     gameMode = 0;
                 }
             }
-            else if (gameMode == 1 && Elmij.Item1 >= 0 && Elmij .Item2>= 0 && Elmij.Item1 <= 7 && Elmij.Item2 <= 7 && Elmij != ichosenelm && Elmij== Elmijorg) //if click in field and previos selected i,j is different (-1,-1 or other elm) 
+            else if (!animation && gameMode == 1 && Elmij.Item1 >= 0 && Elmij .Item2>= 0 && Elmij.Item1 <= 7 && Elmij.Item2 <= 7 && Elmij != ichosenelm && Elmij== Elmijorg) //if click in field and previos selected i,j is different (-1,-1 or other elm) 
             {
                 int ry = ichosenelm.Item2 - Elmij.Item2;
                 int rx = ichosenelm.Item1 - Elmij.Item1;
                 if (ichosenelm != (-1, -1) && ((ichosenelm.Item1 == Elmij.Item1 && ry * ry == 1) || (ichosenelm.Item2 == Elmij.Item2 && rx * rx == 1))) //is real and other elm
                 {
-                    //Elms[ichosenelm.Item1, ichosenelm.Item2].rotangle = -1f;
                     StartExchangeAnimation(Elmij, ichosenelm, true);
                     ichosenelm = (-1, -1);
                 }
                 else //that first elm is not neighbor ergo this other choice
                 {
-                   //if(ichosenelm != (-1, -1))
-                   //     Elms[ichosenelm.Item1, ichosenelm.Item2].rotangle = -1f;
                     ichosenelm = Elmij;
                     Elms[Elmij.Item1, Elmij.Item2].rotangle = 0;
                 }
@@ -983,34 +857,6 @@ namespace ZMatch3
             base.OnMouseUp(e);
         }
 
-    /*    public void DrawRectangle(Vector2 oldPos, Vector2 newPos)
-        {
-            float[] rec = new float[] { oldPos.X, oldPos.Y, newPos.X, oldPos.Y, newPos.X, newPos.Y, oldPos.X, newPos.Y };
-            byte[] indices = new byte[] { 0, 2, 1, 0, 2, 3 };
-            int VertexBufferCursor, _vao, VBO;
-            VBO = GL.GenBuffer();
-            GL.BindBuffer(BufferTarget.ElementArrayBuffer, VBO);
-            GL.BufferData(BufferTarget.ElementArrayBuffer, indices.Count() * sizeof(byte), indices, BufferUsageHint.StaticDraw);
-            VertexBufferCursor = GL.GenBuffer();
-            GL.BindBuffer(BufferTarget.ArrayBuffer, VertexBufferCursor);
-            GL.BufferData(BufferTarget.ArrayBuffer, rec.Count() * sizeof(float), rec, BufferUsageHint.StaticDraw);
-            _vao = GL.GenVertexArray();
-            GL.BindVertexArray(_vao);
-            GL.EnableVertexAttribArray(0);
-            GL.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 2 * sizeof(float), 0);
-            GL.BindVertexArray(0);
-            shader3.Use();
-            Matrix4 model = Matrix4.Identity;
-            Matrix4 projectionM = Matrix4.CreateScale(new Vector3(1f / this.Width, 1f / this.Height, 1.0f));
-            projectionM = Matrix4.CreateOrthographicOffCenter(0.0f, this.Width, this.Height, 0.0f, -1.0f, 1.0f);
-            GL.UniformMatrix4(0, false, ref model);
-            GL.UniformMatrix4(1, false, ref projectionM);
-            shader3.SetFloat("color", new Vector4(0.0f, 1.0f, 1.0f, 1.0f));
-            GL.BindVertexArray(_vao);
-            GL.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedByte, indices);
-            GL.BindVertexArray(0);
-            shader3.Unbind();
-        }*/
-
+    
     }
 }

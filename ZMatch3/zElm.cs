@@ -9,6 +9,13 @@ namespace ZMatch3
         public bool isanimated { get; set; }
         private zAnimation anm;
         public (float, float) getTmtrxXY((float, float) existedTxy) => isanimated ? anm.getTmtrxXY(existedTxy) : existedTxy;
+        /*
+         orgij - Animation Start Point (this is not element coordinates)
+         limit - Count of ticks for animate
+         delta - velocity: NDC per tick
+         xanim - true if move on horizontal
+         isfakeexch - true for user choisen elm (for back it if no match)
+         * */
         public void StartAnimation((ushort, ushort) orgij,int limit, float delta, bool xanim, bool isfakeexch=false)
         {
             anm = new zAnimation(orgij, limit,  delta, xanim);
@@ -21,13 +28,24 @@ namespace ZMatch3
         public (ushort, ushort) getorgij { get { return anm.getorgij; } }
         public float rotangle { get; set; }
         public ushort elmtype { get; set; }
+        //True for just moved mat be not muched elm
         public bool isfakeexchanged { get; set; }
+        /*
+         Destroy function set this flag and gravity function
+         * */
         public bool IsDestroed { get; set; }
+        /*
+         This flags seting before elms destoed
+         When Gravity func see this flags, it spawn bomb bonus and etc.
+         * */
         public bool SpawnBombThere { get; set; }
         public bool SpawnHReaperThere { get; set; }
         public bool SpawnVReaperThere { get; set; }
+        //this is bonus
         public bool IsBomb { get; set; }
+        //This is not a bonus, flag to spawn it, if 4 match
         public ushort ReaperType { get; set; }
+        //delay in ticks before new top elms will be draw
         public int waittospawn { get; set; }
         public zElm(ushort type=0,ushort reapertype=0)
        {

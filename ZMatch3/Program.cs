@@ -28,7 +28,7 @@ namespace ZMatch3
             var nativeWindowSettings = new NativeWindowSettings()
             {
                 Size = new Vector2i(800, 600),
-                Title = "LearnOpenTK - Creating a Window",
+                Title = "ZMatch3",
             };
             
 
@@ -37,6 +37,7 @@ namespace ZMatch3
             {
                 window.UpdateFrequency = 60;
                 window.RenderFrequency = 60;
+                window.WindowBorder = OpenTK.Windowing.Common.WindowBorder.Hidden;
                 window.Run();
             }
 
